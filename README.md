@@ -1,0 +1,2 @@
+# GAYA_BOT
+Bot GAYA LGK
