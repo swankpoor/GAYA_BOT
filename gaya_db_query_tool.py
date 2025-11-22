@@ -1,114 +1,195 @@
 import sqlite3
 import logging
 import os
+import time
 from datetime import datetime
+from threading import Lock
 
-logger = logging.getLogger('GAYA_DB_TOOL')
+# ==========================================================
+#  CONFIGURAÇÃO DE LOG
+# ==========================================================
+logger = logging.getLogger("GAYA_DB_TOOL")
+logger.setLevel(logging.DEBUG)
 
-# Define o nome do arquivo do banco de dados SQLite
+# ==========================================================
+#  ARQUIVOS E LOCK GLOBAL DO BD
+# ==========================================================
 DB_FILE = os.path.join(os.path.dirname(__file__), "gaya_data.db")
+_db_lock = Lock()
 
-def _init_db():
-    """Inicializa o banco de dados com dados mockados para teste."""
-    conn = None
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        # Cria a tabela fretes, se não existir
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS fretes (
-                id INTEGER PRIMARY KEY,
-                origem TEXT NOT NULL,
-                destino TEXT NOT NULL,
-                status TEXT NOT NULL,
-                peso_kg REAL,
-                valor REAL,
-                data_cadastro TEXT
-            );
-        """)
+# ==========================================================
+#  UTILIDADES
+# ==========================================================
+def _pause(sec=1):
+    """Pausa controlada para garantir tempo de processamento em máquinas fracas."""
+    time.sleep(sec)
 
-        # Verifica se a tabela está vazia e insere dados mockados
-        cursor.execute("SELECT COUNT(*) FROM fretes")
-        if cursor.fetchone()[0] == 0:
-            fretes_mock = [
-                ('São Paulo', 'Rio de Janeiro', 'Aguardando', 1500.50, 850.00, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                ('Belo Horizonte', 'Salvador', 'Em Rota', 800.00, 1200.00, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                ('Curitiba', 'Porto Alegre', 'Entregue', 2200.75, 950.00, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                ('São Paulo', 'Curitiba', 'Aguardando', 1000.00, 700.00, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                ('Rio de Janeiro', 'São Paulo', 'Em Rota', 500.00, 500.00, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            ]
-            for frete in fretes_mock:
-                cursor.execute(
+
+def _get_connection():
+    """Retorna conexão segura com controle de LOCK."""
+    _pause(0.2)
+    conn = sqlite3.connect(DB_FILE, timeout=5, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+# ==========================================================
+#  INICIALIZAÇÃO DO BANCO
+# ==========================================================
+def init_db():
+    with _db_lock:
+        try:
+            logger.info("Inicializando banco de dados GAYA...")
+            _pause(1)
+
+            conn = _get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS fretes (
+                    id INTEGER PRIMARY KEY,
+                    origem TEXT NOT NULL,
+                    destino TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    peso_kg REAL,
+                    valor REAL,
+                    data_cadastro TEXT
+                );
+                """
+            )
+
+            cursor.execute("SELECT COUNT(*) FROM fretes")
+            if cursor.fetchone()[0] == 0:
+                logger.warning("Banco vazio — inserindo dados mockados...")
+                fretes_mock = [
+                    ("São Paulo", "Rio de Janeiro", "Aguardando", 1500.5, 850.0, datetime.now().isoformat()),
+                    ("Belo Horizonte", "Salvador", "Em Rota", 800.0, 1200.0, datetime.now().isoformat()),
+                    ("Curitiba", "Porto Alegre", "Entregue", 2200.75, 950.0, datetime.now().isoformat()),
+                    ("São Paulo", "Curitiba", "Aguardando", 1000.0, 700.0, datetime.now().isoformat()),
+                    ("Rio de Janeiro", "São Paulo", "Em Rota", 500.0, 500.0, datetime.now().isoformat()),
+                ]
+
+                cursor.executemany(
                     "INSERT INTO fretes (origem, destino, status, peso_kg, valor, data_cadastro) VALUES (?, ?, ?, ?, ?, ?)",
-                    frete
+                    fretes_mock,
                 )
-            conn.commit()
-            logger.info("Banco de dados GAYA inicializado com dados mockados de fretes.")
-        
-    except sqlite3.Error as e:
-        logger.error(f"Erro ao inicializar o banco de dados: {e}")
-    finally:
-        if conn:
+                conn.commit()
+                logger.info("Dados mockados inseridos.")
+
             conn.close()
+            _pause(0.5)
+            logger.info("Banco pronto para uso.")
 
-# Inicializa o BD ao carregar o módulo
-_init_db()
+        except Exception as e:
+            logger.error(f"Erro ao iniciar o banco: {e}")
 
 
-def consultar_status_geral_db():
+# ==========================================================
+#  CONSULTA INTELIGENTE (TOOL PRINCIPAL)
+# ==========================================================
+def consultar_fretes(query: str = "status_geral", status: str = None):
     """
-    Função de ferramenta para o LLM. 
-    Consulta o banco de dados da GAYA para obter o status atual de fretes,
-    contando o total de fretes e o status de cada um.
-    
-    Retorna uma string JSON detalhando o status atual.
+    Função inteligente para consulta de fretes.
+
+    query pode ser:
+      • status_geral
+      • total
+      • total_por_status
+      • listar_por_status
+      • valor_total
+      • mais_caro
     """
-    conn = None
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        # 1. Contar total de fretes
-        cursor.execute("SELECT COUNT(*) FROM fretes")
-        total_fretes = cursor.fetchone()[0]
-        
-        # 2. Contar fretes por status
-        cursor.execute("SELECT status, COUNT(*) FROM fretes GROUP BY status")
-        status_counts = dict(cursor.fetchall())
-        
-        # 3. Calcular valor total
-        cursor.execute("SELECT SUM(valor) FROM fretes")
-        valor_total = cursor.fetchone()[0] or 0.0
 
-        # Formata o resultado em JSON para ser lido pelo LLM
-        return {
-            "total_fretes": total_fretes,
-            "fretes_por_status": status_counts,
-            "valor_total_bruto": round(valor_total, 2),
-            "data_ultima_atualizacao": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
+    _pause(0.5)
 
-    except sqlite3.Error as e:
-        logger.error(f"Erro na consulta ao banco de dados: {e}")
-        return {"erro": f"Não foi possível consultar o banco de dados: {e}"}
-    finally:
-        if conn:
+    with _db_lock:
+        try:
+            conn = _get_connection()
+            cursor = conn.cursor()
+
+            if query == "status_geral":
+                cursor.execute("SELECT COUNT(*) FROM fretes")
+                total = cursor.fetchone()[0]
+
+                cursor.execute("SELECT status, COUNT(*) FROM fretes GROUP BY status")
+                por_status = dict(cursor.fetchall())
+
+                cursor.execute("SELECT SUM(valor) FROM fretes")
+                valor_total = cursor.fetchone()[0] or 0.0
+
+                result = {
+                    "total_fretes": total,
+                    "fretes_por_status": por_status,
+                    "valor_total_bruto": round(valor_total, 2),
+                    "timestamp": datetime.now().isoformat(),
+                }
+
+            elif query == "total":
+                cursor.execute("SELECT COUNT(*) FROM fretes")
+                result = {"total_fretes": cursor.fetchone()[0]}
+
+            elif query == "total_por_status":
+                cursor.execute("SELECT status, COUNT(*) FROM fretes GROUP BY status")
+                result = {"fretes_por_status": dict(cursor.fetchall())}
+
+            elif query == "listar_por_status":
+                if not status:
+                    return {"erro": "status não fornecido"}
+                cursor.execute("SELECT * FROM fretes WHERE status = ?", (status,))
+                linhas = [dict(row) for row in cursor.fetchall()]
+                result = {"status": status, "fretes": linhas}
+
+            elif query == "valor_total":
+                cursor.execute("SELECT SUM(valor) FROM fretes")
+                result = {"valor_total": cursor.fetchone()[0] or 0.0}
+
+            elif query == "mais_caro":
+                cursor.execute(
+                    "SELECT * FROM fretes ORDER BY valor DESC LIMIT 1"
+                )
+                row = cursor.fetchone()
+                result = {"frete_mais_caro": dict(row) if row else None}
+
+            else:
+                result = {"erro": "query inválida"}
+
             conn.close()
+            _pause(0.3)
+            return result
 
-# Dicionário mapeando a função Python ao seu SCHEMA (importante para o LLM)
+        except Exception as e:
+            logger.error(f"Erro na consulta: {e}")
+            return {"erro": str(e)}
+
+
+# ==========================================================
+#  TOOL SCHEMA PARA O LLM
+# ==========================================================
 TOOL_SCHEMA = {
-    "name": "consultar_status_geral_db",
-    "description": "Ferramenta essencial para responder perguntas sobre o número total de fretes, cargas, pedidos, status de logística e informações financeiras atuais armazenadas no banco de dados da GAYA.",
+    "name": "consultar_fretes",
+    "description": "Consulta inteligente do banco GAYA. Suporta status geral, contagens, totais, listagem por status e frete mais caro.",
     "parameters": {
         "type": "object",
-        "properties": {} # Não recebe argumentos, é uma consulta geral
-    }
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Tipo da consulta: status_geral, total, total_por_status, listar_por_status, valor_total, mais_caro",
+            },
+            "status": {
+                "type": "string",
+                "description": "Status desejado quando query='listar_por_status'",
+            },
+        },
+        "required": ["query"],
+    },
 }
 
-# Dicionário que mapeia o nome da função (string) para o objeto da função (referência)
 TOOL_FUNCTIONS = {
-    "consultar_status_geral_db": consultar_status_geral_db
+    "consultar_fretes": consultar_fretes,
 }
 
-logger.info("✅ Ferramenta de consulta DB carregada.")
+# Inicializa banco ao carregar
+init_db()
+
+logger.info("Tool de BD inteligente carregada com sucesso.")
