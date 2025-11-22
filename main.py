@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from gaya_db_tool import TOOL_FUNCTIONS, TOOL_SCHEMA
-from gaya_llm_router import processar_com_llm   # você ainda vai colar esse arquivo quando eu te enviar
+from gaya_llm_router import processar_com_llm
+
 
 # =====================================================
 # CONFIGURAÇÃO DE LOG
@@ -17,16 +18,19 @@ handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter("%(asctime)s - GAYA_API - %(levelname)s: %(message)s"))
 logger.addHandler(handler)
 
+
 # =====================================================
-# FASTAPI
+# FASTAPI APP
 # =====================================================
 
 app = FastAPI(title="Gaya AI API")
+
 
 class Mensagem(BaseModel):
     text: str
     username: str
     user_id: int
+
 
 # =====================================================
 # ENDPOINT PRINCIPAL /mensagem
@@ -34,65 +38,70 @@ class Mensagem(BaseModel):
 
 @app.post("/mensagem")
 async def receber_mensagem(msg: Mensagem):
-
-    logger.info(f"📥 Recebi mensagem de {msg.username}: {msg.text}")
-    time.sleep(1)   # pequena pausa para não engasgar a máquina
+    logger.info(f"📥 Mensagem recebida de {msg.username}: {msg.text}")
+    time.sleep(1)
 
     # -------------------------------------------------------------------------
-    # 1) PEDIDO PARA A LLM INTERPRETAR A PERGUNTA
+    # 1) CHAMADA AO MODELO PARA INTERPRETAÇÃO
     # -------------------------------------------------------------------------
-    logger.info("🧠 Enviando para a LLM interpretar pergunta...")
+
+    logger.info("🧠 Enviando para LLM interpretar...")
     time.sleep(1)
 
     llm_result = processar_com_llm(
         pergunta=msg.text,
-        ferramentas=[TOOL_SCHEMA]     # LLM sabe que existe a ferramenta consultar_status_geral_db
+        ferramentas=[TOOL_SCHEMA]   # lista de tools disponíveis
     )
 
-    logger.debug(f"🔍 LLM retornou: {llm_result}")
+    logger.debug(f"🔍 Resposta inicial da LLM: {llm_result}")
     time.sleep(1)
 
     # -------------------------------------------------------------------------
-    # 2) VERIFICAR SE A LLM PEDIU ALGUMA FERRAMENTA
+    # 2) SE A LLM SOLICITAR UMA TOOL
     # -------------------------------------------------------------------------
 
-    if llm_result.get("usar_tool"):
-        nome_tool = llm_result["usar_tool"]
-        logger.warning(f"⚙️ LLM solicitou ferramenta: {nome_tool}")
+    tool_solicitada = llm_result.get("usar_tool")
+
+    if tool_solicitada:
+        logger.warning(f"⚙️ A LLM pediu a tool: {tool_solicitada}")
         time.sleep(1)
 
-        if nome_tool in TOOL_FUNCTIONS:
+        # Tool existe?
+        if tool_solicitada in TOOL_FUNCTIONS:
 
-            logger.info(f"🚀 Executando ferramenta '{nome_tool}'...")
+            logger.info(f"🚀 Executando ferramenta '{tool_solicitada}'...")
             time.sleep(1)
 
-            resultado_tool = TOOL_FUNCTIONS[nome_tool]()
-
+            resultado_tool = TOOL_FUNCTIONS[tool_solicitada]()
             logger.info(f"📊 Retorno da ferramenta: {resultado_tool}")
             time.sleep(1)
 
-            # -----------------------------------------------------------------
-            # 3) GERAR RESPOSTA FINAL DA LLM APÓS EXECUÇÃO DA TOOL
-            # -----------------------------------------------------------------
-            logger.info("🧠 Montando resposta final com o resultado da ferramenta...")
+            # ---------------------------------------------------------------
+            # 3) GERA A RESPOSTA FINAL BASEADA NOS DADOS DO BANCO
+            # ---------------------------------------------------------------
+
+            logger.info("🧠 Pedindo para a LLM montar a resposta final...")
             time.sleep(1)
 
             resposta_final = processar_com_llm(
-                pergunta=f"Monte uma resposta natural usando estes dados: {resultado_tool}",
-                ferramentas=[]   # agora sem ferramentas
+                pergunta=f"Use estes dados e gere uma resposta natural, clara e útil: {resultado_tool}",
+                ferramentas=[]   # agora não pode chamar ferramentas
             )
 
-            logger.info(f"💬 Resposta final pronta: {resposta_final.get('resposta')}")
-            return {"response": resposta_final.get("resposta")}
+            resposta_texto = resposta_final.get("resposta")
+            logger.info(f"💬 Resposta final enviada: {resposta_texto}")
+
+            return {"response": resposta_texto}
 
         else:
-            logger.error(f"❌ A LLM pediu uma ferramenta inexistente: {nome_tool}")
-            return {"response": "Erro interno: ferramenta desconhecida."}
+            logger.error(f"❌ Tool inexistente solicitada: {tool_solicitada}")
+            return {"response": "Erro: a IA pediu uma ferramenta inexistente."}
 
     # -------------------------------------------------------------------------
-    # 4) SE NÃO PRECISAR DE TOOL, RESPONDE DIRETO
+    # 3) SE NÃO PEDIU TOOL → RESPOSTA DIRETA
     # -------------------------------------------------------------------------
-    logger.info("💬 A LLM respondeu sem precisar de ferramentas.")
+
+    logger.info("💬 A LLM respondeu diretamente.")
     time.sleep(1)
 
     return {"response": llm_result.get("resposta")}
