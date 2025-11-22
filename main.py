@@ -48,6 +48,10 @@ def _call_ollama_api(payload: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"Erro de comunicação com Ollama: {e}")
         # Retorna um formato de erro que o loop principal possa gerenciar
         return {"error": f"Erro de comunicação com LLM: {e}"}
+        
+        logger.info(f"📤 Enviando prompt para LLM: {prompt}")
+        logger.info(f"📤 Histórico de mensagens: {messages}")
+
 
 def _get_llm_response(prompt: str, tools_schema: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
@@ -136,7 +140,8 @@ def _get_llm_response(prompt: str, tools_schema: List[Dict[str, Any]]) -> Dict[s
 
 def _process_function_call(response: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Processa a resposta do Ollama para executar uma função, se solicitada."""
-    
+    logger.info(f"🔍 Processando resposta do LLM: {response}")
+
     # Verifica se o Ollama solicitou uma chamada de função
     # OBS: Quando *forçamos* a chamada no _get_llm_response, a função
     # que é executada é a do *nosso* código, e o resultado é passado
@@ -189,7 +194,11 @@ def _get_final_response_after_tool(
     tool_name: str, 
     tool_output: Dict[str, Any],
     tools_schema: List[Dict[str, Any]]
-) -> Dict[str, Any]:
+) -> Dict[str, Any]:                        
+
+    logger.info(f"📤 Enviando resultado da tool de volta ao LLM para gerar resposta final")
+    logger.info(f"📤 Resultado da ferramenta: {tool_output}")
+
     """Envia o resultado da função de volta ao LLM para gerar a resposta final."""
 
     # Prepara o histórico da conversa com o resultado da tool
