@@ -11,7 +11,7 @@ logger = logging.getLogger("GAYA_LLM_ROUTER")
 # ============================================================
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
-OLLAMA_MODEL = "llama3.2:1b"   # leve e ideal para tua máquina
+OLLAMA_MODEL = "llama3.1"   # leve e ideal para tua máquina
 
 
 # ============================================================
