@@ -2,7 +2,14 @@
 """
 GAYA_telegram.py - VERSÃO CORRIGIDA
 """
+import os
+import time
+from gaya_db import GayaDatabase
+from excel_processor import ExcelProcessor
 
+# Inicializar após os imports
+db = GayaDatabase(DB_PATH)
+excel_processor = ExcelProcessor()
 import logging
 import requests
 import json
