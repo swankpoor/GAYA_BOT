@@ -15,7 +15,7 @@ logging.basicConfig(
 
 # Configurações
 OPENROUTER_API_KEY = "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"
-OPENROUTER_MODEL = "openrouter/auto"  # AUTO ROUTER - escolhe o melhor modelo
+OPENROUTER_MODEL = "openrouter/auto"
 DATABASE_PATH = 'transportes.db'
 
 # Inicialização do banco de dados
@@ -38,20 +38,20 @@ def init_db():
         )
     ''')
     
-    # Tabela para aprendizado - armazena "conhecimento" do bot
+    # Tabela para aprendizado - REMOVIDOS COMENTÁRIOS COM #
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS bot_knowledge (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            intent TEXT,  # Intenção aprendida
-            pattern TEXT,  # Padrão de pergunta
-            sql_query TEXT,  # Consulta SQL associada
-            description TEXT,  # Descrição do que faz
+            intent TEXT,
+            pattern TEXT,
+            sql_query TEXT,
+            description TEXT,
             usage_count INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
-    # Tabela de schema para o bot entender a estrutura
+    # Tabela de schema
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS database_schema (
             table_name TEXT,
@@ -107,7 +107,6 @@ def init_db():
     conn.commit()
     conn.close()
     logging.info("✅ Banco de dados e tabelas de conhecimento inicializados!")
-
 # Obter schema completo do banco
 def get_database_schema():
     conn = sqlite3.connect(DATABASE_PATH)
@@ -470,13 +469,11 @@ async def show_schema(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(schema_text)
 
-# Main
 def main():
     # Inicializar banco com conhecimento
     init_db()
     
     # Criar aplicação
-    # No final do arquivo:
     application = Application.builder().token("8257705817:AAGmQCwF4Bu9sO6zi4KVzX1qf9OjeE2WWPo").build()
     
     # Handlers
