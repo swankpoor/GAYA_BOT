@@ -6,6 +6,11 @@ import re
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from typing import Dict, List, Any
+import os
+from dotenv import load_dotenv
+
+# Carregar variáveis do arquivo .env
+load_dotenv()
 
 # Configuração de logging
 logging.basicConfig(
@@ -13,8 +18,9 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Configurações
-OPENROUTER_API_KEY = "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"
+# Configurações (AGORA SEGURAS)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENROUTER_MODEL = "openrouter/auto"
 DATABASE_PATH = 'transportes.db'
 
@@ -474,7 +480,7 @@ def main():
     init_db()
     
     # Criar aplicação
-    application = Application.builder().token("8257705817:AAGmQCwF4Bu9sO6zi4KVzX1qf9OjeE2WWPo").build()
+application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
     # Handlers
     application.add_handler(CommandHandler("start", start))
