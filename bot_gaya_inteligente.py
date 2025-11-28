@@ -34,19 +34,19 @@ logger = logging.getLogger('GAYA_BOT')
 planilha_analyzer = PlanilhaAnalyzer()
 
 # 🆕 HANDLER DE DOCUMENTOS COM ANÁLISE INTELIGENTE
+
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Processa arquivos Excel com análise inteligente"""
+    """Processa arquivos Excel com análise inteligente E SALVA NO BANCO"""
     document = update.message.document
     user = update.message.from_user
     
-    # Verificar se é um arquivo Excel
     if not document.file_name.lower().endswith(('.xlsx', '.xls')):
         await update.message.reply_text("❌ Por favor, envie um arquivo Excel (.xlsx ou .xls)")
         return
     
     logger.info(f"📊 Recebida planilha: {document.file_name} de {user.first_name}")
     
-    processing_msg = await update.message.reply_text("🔍 **Analisando planilha inteligentemente...**")
+    processing_msg = await update.message.reply_text("🔍 **Analisando e salvando no banco...**")
     
     try:
         # Baixar o arquivo
@@ -54,13 +54,16 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_path = f"temp_{document.file_name}"
         await file.download_to_drive(file_path)
         
-        # 🎯 ANÁLISE INTELIGENTE COM PLANILHA_ANALYZER
+        # 🎯 ANÁLISE INTELIGENTE
         resultado_analise = planilha_analyzer.analisar_planilha(file_path)
+        
+        # 🎯 SALVAR NO BANCO
+        from database_manager import salvar_analise_planilha
+        salvou = salvar_analise_planilha(resultado_analise)
         
         # Limpar arquivo temporário
         os.remove(file_path)
         
-        # Processar resultado da análise
         if resultado_analise["resumo"]["status"] == "erro":
             await context.bot.edit_message_text(
                 chat_id=processing_msg.chat_id,
@@ -69,16 +72,15 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # 🎯 AQUI FUTURAMENTE: SALVAR NO BANCO COM OS DADOS ESTRUTURADOS
-        # Por enquanto, apenas mostramos a análise
-        
-        # Preparar resposta detalhada
+        # Preparar resposta com confirmação de salvamento
         total_registros = resultado_analise["planilha_metadata"]["total_registros"]
         inconsistencias = resultado_analise["analise_consistencia"]["inconsistencias_detectadas"]
         acessorios_identificados = resultado_analise["analise_acessorios"]["acessorios_identificados"]
         
         mensagem = f"""
 ✅ **Análise Inteligente Concluída!**
+
+{'💾 **DADOS SALVOS NO BANCO!**' if salvou else '❌ **Erro ao salvar no banco**'}
 
 📊 **Resumo da Planilha:**
 • 📈 Registros processados: {total_registros}
@@ -92,16 +94,16 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📋 **Status de Qualidade:**
 {'🟢 **DADOS CONSISTENTES**' if inconsistencias == 0 else '🟡 **VERIFICAR INCONSISTÊNCIAS**'}
 
-💡 **Próximos passos:**
-• Use /dados para consultar o banco
-• Pergunte sobre transportes específicos
-• Verifique chassis repetidos com /chassis
+💡 **Agora você pode:**
+• Perguntar: "mostre todas as inconsistências"
+• Consultar: "status da análise"
+• Verificar: "quais acessórios encontrados"
 """
         
         # Adicionar detalhes de inconsistências se houver
         if inconsistencias > 0:
             mensagem += "\n\n🔍 **Inconsistências Detectadas:**"
-            for inc in resultado_analise["analise_consistencia"]["inconsistencias"][:3]:  # Mostrar apenas as 3 primeiras
+            for inc in resultado_analise["analise_consistencia"]["inconsistencias"][:3]:
                 mensagem += f"\n• {inc['descricao']}"
             
             if len(resultado_analise["analise_consistencia"]["inconsistencias"]) > 3:
