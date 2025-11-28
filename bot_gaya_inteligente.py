@@ -476,7 +476,8 @@ def main():
     init_db()
     
     # Criar aplicação
-    application = Application.builder().token("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").build()
+    # No final do arquivo:
+    application = Application.builder().token("8257705817:AAGmQCwF4Bu9sO6zi4KVzX1qf9OjeE2WWPo").build()
     
     # Handlers
     application.add_handler(CommandHandler("start", start))
