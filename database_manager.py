@@ -43,11 +43,60 @@ def init_db(db_path: str = 'transportes.db'):
             )
         """)
         
+        # Tabela para transportes individuais (para consultas rápidas)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transportes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chassis TEXT,
+                lt TEXT,
+                transportadora TEXT,
+                data TEXT,
+                origem TEXT,
+                destino TEXT,
+                status TEXT,
+                acessorios TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
         conn.commit()
         conn.close()
         logger.info("✅ Banco de dados inicializado para dados analisados")
     except Exception as e:
         logger.error(f"Erro ao inicializar banco: {e}")
+
+def salvar_transportes_individualmente(dados_estruturados: List[Dict[str, Any]], db_path: str = 'transportes.db') -> int:
+    """Salva cada transporte individualmente na tabela transportes"""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        count = 0
+        for transporte in dados_estruturados:
+            cursor.execute("""
+                INSERT OR REPLACE INTO transportes 
+                (chassis, lt, transportadora, data, origem, destino, status, acessorios)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                transporte.get('chassis'),
+                transporte.get('lt'), 
+                transporte.get('transportadora'),
+                transporte.get('data'),
+                transporte.get('origem'),
+                transporte.get('destino'),
+                transporte.get('status'),
+                str(transporte.get('acessorios', []))
+            ))
+            count += 1
+        
+        conn.commit()
+        conn.close()
+        logger.info(f"💾 Transportes salvos individualmente: {count} registros")
+        return count
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao salvar transportes individualmente: {e}")
+        return 0
 
 def salvar_analise_planilha(resultado_analise: Dict[str, Any], db_path: str = 'transportes.db') -> bool:
     """Salva o resultado completo da análise no banco de dados"""
@@ -91,6 +140,11 @@ def salvar_analise_planilha(resultado_analise: Dict[str, Any], db_path: str = 't
         
         conn.commit()
         conn.close()
+        
+        # ✅ NOVO: SALVAR DADOS INDIVIDUAIS NA TABELA transportes
+        if "dados_estruturados" in resultado_analise:
+            salvos_count = salvar_transportes_individualmente(resultado_analise["dados_estruturados"], db_path)
+            logger.info(f"✅ Dados salvos em ambas tabelas. Transportes: {salvos_count}")
         
         logger.info(f"✅ Análise salva no banco. ID: {analise_id}, Inconsistências: {len(resultado_analise['analise_consistencia']['inconsistencias'])}")
         return True
