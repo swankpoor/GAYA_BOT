@@ -14,7 +14,7 @@ logging.basicConfig(
 )
 
 # Configurações
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "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"
 OPENROUTER_MODEL = "openrouter/auto"
 DATABASE_PATH = 'transportes.db'
 
